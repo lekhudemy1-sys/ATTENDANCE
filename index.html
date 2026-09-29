@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Login — Prithvi Realcon Transport</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="common.js"></script>
+</head>
+<body>
+<div class="shell">
+  <div class="card">
+    <div class="in">
+      <div data-brand></div>
+      <h1 id="ttl">Welcome back</h1>
+      <p class="sub" id="sb">Log in to mark your attendance.</p>
+      <div class="road"></div>
+
+      <label for="nm">Name</label>
+      <input id="nm" type="text" autocomplete="username" placeholder="As added by admin">
+
+      <label for="pw">Password</label>
+      <div class="pwrap">
+        <input id="pw" type="password" autocomplete="current-password" placeholder="Min. 4 characters">
+        <button type="button" id="eye">Show</button>
+      </div>
+
+      <button class="full accent" id="go">Log in</button>
+      <div id="status" class="status"></div>
+
+      <p class="center" style="margin-top:20px"><a href="#" id="tg">First time? Create your account</a></p>
+    </div>
+  </div>
+  <p class="center"><a href="admin.html">Admin login →</a></p>
+</div>
+<script>
+let signup = false;
+
+if (getToken()) location.href = 'dashboard.html';
+
+$('eye').onclick = () => {
+  const show = $('pw').type === 'password';
+  $('pw').type = show ? 'text' : 'password';
+  $('eye').textContent = show ? 'Hide' : 'Show';
+};
+
+$('tg').onclick = (e) => {
+  e.preventDefault();
+  signup = !signup;
+  $('go').textContent = signup ? 'Create account' : 'Log in';
+  $('ttl').textContent = signup ? 'Create account' : 'Welcome back';
+  $('sb').textContent = signup
+    ? 'Use the name your admin added, then choose a password.'
+    : 'Log in to mark your attendance.';
+  $('pw').autocomplete = signup ? 'new-password' : 'current-password';
+  $('tg').textContent = signup ? 'Already have an account? Log in' : 'First time? Create your account';
+  $('status').style.display = 'none';
+};
+
+$('go').onclick = async () => {
+  const name = $('nm').value.trim();
+  const password = $('pw').value;
+
+  if (!name) return msg('Enter your name.', 'error');
+  if (password.length < 4) return msg('Password must be at least 4 characters.', 'error');
+
+  setBusy($('go'), true);
+  msg('Please wait…', 'info');
+
+  try {
+    const { data, error } = await sb.rpc(signup ? 'emp_register' : 'emp_login', {
+      p_name: name,
+      p_password: password,
+    });
+    if (error) return msg(esc(error.message), 'error');
+    saveSession(data.token, data.name);
+    location.href = 'dashboard.html';
+  } finally {
+    setBusy($('go'), false);
+  }
+};
+
+$('pw').onkeydown = (e) => { if (e.key === 'Enter') $('go').click(); };
+$('nm').onkeydown = (e) => { if (e.key === 'Enter') $('pw').focus(); };
+</script>
+</body>
+</html>

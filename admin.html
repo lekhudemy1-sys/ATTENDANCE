@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Admin — Prithvi Realcon Transport</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="common.js"></script>
+</head>
+<body>
+<div class="shell" id="lg">
+  <div class="card">
+    <div class="in">
+      <div data-brand></div>
+      <h1>Admin login</h1>
+      <p class="sub">Dispatch console access.</p>
+      <div class="road"></div>
+      <label for="pw">Password</label>
+      <input id="pw" type="password" autocomplete="current-password">
+      <button class="full accent" id="go">Log in</button>
+      <div id="status" class="status"></div>
+      <p class="center" style="margin-top:20px"><a href="index.html">← Employee login</a></p>
+    </div>
+  </div>
+</div>
+
+<div class="shell wide" id="db" style="display:none">
+  <div class="top">
+    <div data-brand style="margin:0"></div>
+    <a href="#" id="out">Log out</a>
+  </div>
+  <h1 style="margin:14px 0 4px">Dispatch console</h1>
+  <div class="road"></div>
+
+  <div class="stats">
+    <div class="stat"><b id="s1">0</b><span>Team</span></div>
+    <div class="stat"><b id="s2">0</b><span>In today</span></div>
+    <div class="stat"><b id="s3">0</b><span>On leave</span></div>
+    <div class="stat hot"><b id="s4">0</b><span>Pending</span></div>
+  </div>
+
+  <div class="tabs">
+    <button class="on" data-tab="p1">Leaves</button>
+    <button data-tab="p2">Attendance</button>
+    <button data-tab="p3">Team</button>
+  </div>
+
+  <div class="pane on" id="p1">
+    <div class="card wide"><div class="in">
+      <h2>Pending requests</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Employee</th><th>Dates</th><th>Reason</th><th></th></tr></thead>
+        <tbody id="pl"></tbody>
+      </table></div>
+    </div></div>
+    <div class="card wide"><div class="in">
+      <h2>History</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Employee</th><th>Dates</th><th>Status</th><th></th></tr></thead>
+        <tbody id="hl"></tbody>
+      </table></div>
+    </div></div>
+  </div>
+
+  <div class="pane" id="p2">
+    <div class="card wide"><div class="in">
+      <div class="row">
+        <input type="date" id="fd">
+        <select id="fs">
+          <option value="">All status</option>
+          <option value="sign_in">Sign In</option>
+          <option value="sign_out">Sign Out</option>
+        </select>
+        <select id="fe"><option value="">All employees</option></select>
+        <button id="csv" class="ghost">Export CSV</button>
+      </div>
+      <h2 style="margin-top:22px">Working hours</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Date</th><th>Employee</th><th>In</th><th>Out</th><th>Hours</th></tr></thead>
+        <tbody id="hb"></tbody>
+      </table></div>
+      <h2 style="margin-top:22px">Records</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Status</th></tr></thead>
+        <tbody id="ab"></tbody>
+      </table></div>
+    </div></div>
+  </div>
+
+  <div class="pane" id="p3">
+    <div class="card wide"><div class="in">
+      <h2>Add employee</h2>
+      <p class="muted" style="margin-bottom:12px">Add only the name. The employee creates their own password.</p>
+      <div class="row">
+        <input id="nn" placeholder="Employee name">
+        <button id="add" class="accent" style="flex:0 0 auto">Add</button>
+      </div>
+      <div class="tw" style="margin-top:16px"><table>
+        <thead><tr><th>Name</th><th>Account</th><th></th></tr></thead>
+        <tbody id="eb"></tbody>
+      </table></div>
+    </div></div>
+  </div>
+</div>
+
+<script>
+let PW = sessionStorage.getItem('adm') || '';
+let D = null;
+
+const rpc = (f, a = {}) => sb.rpc(f, { pw: PW, ...a });
+
+const sec = (t) => {
+  if (!t) return 0;
+  const [a, b, c] = String(t).split(':').map(Number);
+  return a * 3600 + b * 60 + (c || 0);
+};
+const dur = (s) => (s < 0 ? '—' : Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm');
+const dates = (l) => esc(fmtRange(l.start_date, l.end_date));
+
+document.querySelectorAll('[data-tab]').forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.id === b.dataset.tab));
+  };
+});
+
+async function load() {
+  const { data, error } = await rpc('admin_data');
+  if (error) {
+    PW = '';
+    sessionStorage.removeItem('adm');
+    $('lg').style.display = 'block';
+    $('db').style.display = 'none';
+    return msg(esc(error.message), 'error');
+  }
+  D = data;
+  $('lg').style.display = 'none';
+  $('db').style.display = 'block';
+  draw();
+}
+
+function draw() {
+  const today = todayIST();
+  const pend = D.leaves.filter((l) => l.status === 'pending');
+
+  $('s1').textContent = D.employees.length;
+  $('s2').textContent = new Set(D.attendance.filter((a) => a.date === today && a.status === 'sign_in').map((a) => a.name)).size;
+  $('s3').textContent = D.leaves.filter((l) => l.status === 'approved' && l.start_date <= today && l.end_date >= today).length;
+  $('s4').textContent = pend.length;
+
+  $('pl').innerHTML = pend.length
+    ? pend.map((l) =>
+        '<tr><td><strong>' + esc(l.name) + '</strong></td><td>' + dates(l) + '</td><td class="muted">' +
+        esc(l.reason || '—') +
+        '</td><td><button class="sm ok" data-a="approve" data-id="' + l.id + '">Approve</button> ' +
+        '<button class="sm bad" data-a="reject" data-id="' + l.id + '">Reject</button></td></tr>'
+      ).join('')
+    : '<tr><td colspan="4" class="muted">All clear — nothing pending</td></tr>';
+
+  const hist = D.leaves.filter((l) => l.status !== 'pending');
+  $('hl').innerHTML = hist.length
+    ? hist.map((l) =>
+        '<tr><td><strong>' + esc(l.name) + '</strong></td><td>' + dates(l) + '</td><td>' + pill(l.status) +
+        (l.cancelled_by ? ' <span class="muted">by ' + esc(l.cancelled_by) + '</span>' : '') +
+        '</td><td>' +
+        (l.status === 'approved' ? '<button class="sm bad" data-a="cancel" data-id="' + l.id + '">Cancel leave</button>' : '') +
+        '</td></tr>'
+      ).join('')
+    : '<tr><td colspan="4" class="muted">No history</td></tr>';
+
+  document.querySelectorAll('[data-a]').forEach((b) => {
+    b.onclick = async () => {
+      setBusy(b, true);
+      const { error } = await rpc('admin_leave_action', { p_id: b.dataset.id, p_action: b.dataset.a });
+      setBusy(b, false);
+      if (error) alert(error.message);
+      load();
+    };
+  });
+
+  $('eb').innerHTML = D.employees.length
+    ? D.employees.map((e) =>
+        '<tr><td><strong>' + esc(e.name) + '</strong></td><td>' +
+        (e.registered ? pill('approved', 'registered') : pill('pending', 'not registered')) +
+        '</td><td>' +
+        (e.registered ? '<button class="sm ghost" data-r="' + e.id + '">Reset password</button> ' : '') +
+        '<button class="sm bad" data-d="' + e.id + '">Delete</button></td></tr>'
+      ).join('')
+    : '<tr><td colspan="3" class="muted">No employees yet</td></tr>';
+
+  document.querySelectorAll('[data-d]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('Delete employee and all their records?')) return;
+      setBusy(b, true);
+      const { error } = await rpc('admin_del_employee', { p_id: b.dataset.d });
+      setBusy(b, false);
+      if (error) alert(error.message);
+      load();
+    };
+  });
+
+  document.querySelectorAll('[data-r]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('Reset password? Employee must create account again.')) return;
+      setBusy(b, true);
+      const { error } = await rpc('admin_reset_password', { p_id: b.dataset.r });
+      setBusy(b, false);
+      if (error) alert(error.message);
+      else alert('Password reset. Employee can create account again.');
+      load();
+    };
+  });
+
+  const cur = $('fe').value;
+  $('fe').innerHTML =
+    '<option value="">All employees</option>' +
+    D.employees.map((e) => '<option>' + esc(e.name) + '</option>').join('');
+  $('fe').value = cur;
+  rec();
+}
+
+const rows = () =>
+  D.attendance.filter(
+    (a) =>
+      (!$('fd').value || a.date === $('fd').value) &&
+      (!$('fs').value || a.status === $('fs').value) &&
+      (!$('fe').value || a.name === $('fe').value)
+  );
+
+function rec() {
+  const r = rows();
+  $('ab').innerHTML = r.length
+    ? r.map((a) =>
+        '<tr><td>' + esc(a.date) + '</td><td>' + esc(a.time) + '</td><td>' + esc(a.name) + '</td><td>' +
+        pill(a.status === 'sign_in' ? 'signed_in' : 'signed_out', a.status.replace('_', ' ')) + '</td></tr>'
+      ).join('')
+    : '<tr><td colspan="4" class="muted">No records</td></tr>';
+
+  const g = {};
+  r.forEach((a) => {
+    const k = a.date + '|' + a.name;
+    (g[k] = g[k] || { date: a.date, name: a.name })[a.status] = a.time;
+  });
+  const list = Object.values(g);
+  $('hb').innerHTML = list.length
+    ? list.map((x) => {
+        let hours = '—';
+        if (x.sign_in && x.sign_out) hours = dur(sec(x.sign_out) - sec(x.sign_in));
+        else if (x.sign_in) hours = 'Still in';
+        return (
+          '<tr><td>' + esc(x.date) + '</td><td><strong>' + esc(x.name) + '</strong></td><td>' +
+          esc(x.sign_in || '—') + '</td><td>' + esc(x.sign_out || '—') + '</td><td>' + hours + '</td></tr>'
+        );
+      }).join('')
+    : '<tr><td colspan="5" class="muted">No data</td></tr>';
+}
+
+['fd', 'fs', 'fe'].forEach((i) => {
+  $(i).onchange = rec;
+});
+
+$('csv').onclick = () => {
+  const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const t = ['Date,Time,Employee,Status']
+    .concat(rows().map((a) => [a.date, a.time, a.name, a.status].map(q).join(',')))
+    .join('\n');
+  const u = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = u;
+  a.download = 'attendance_' + ($('fd').value || 'all') + '.csv';
+  a.click();
+  URL.revokeObjectURL(u);
+};
+
+$('add').onclick = async () => {
+  const name = $('nn').value.trim();
+  if (!name || name.length < 2) return alert('Enter a valid name (min 2 characters).');
+  setBusy($('add'), true);
+  const { error } = await rpc('admin_add_employee', { p_name: name });
+  setBusy($('add'), false);
+  if (error) return alert(error.message);
+  $('nn').value = '';
+  load();
+};
+$('nn').onkeydown = (e) => { if (e.key === 'Enter') $('add').click(); };
+
+$('go').onclick = async () => {
+  const pw = $('pw').value;
+  if (!pw) return msg('Enter password.', 'error');
+  PW = pw;
+  sessionStorage.setItem('adm', PW);
+  setBusy($('go'), true);
+  await load();
+  setBusy($('go'), false);
+};
+
+$('pw').onkeydown = (e) => { if (e.key === 'Enter') $('go').click(); };
+
+$('out').onclick = (e) => {
+  e.preventDefault();
+  PW = '';
+  sessionStorage.removeItem('adm');
+  location.reload();
+};
+
+if (PW) load();
+</script>
+</body>
+</html>
