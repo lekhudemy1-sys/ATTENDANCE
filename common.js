@@ -41,6 +41,20 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+// ---- device id (one per browser; survives logout) ----
+const DEVICE_KEY = 'dev_id';
+
+function getDeviceId() {
+  let id = localStorage.getItem(DEVICE_KEY);
+  if (!id) {
+    id =
+      (window.crypto && crypto.randomUUID && crypto.randomUUID()) ||
+      Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    localStorage.setItem(DEVICE_KEY, id);
+  }
+  return id;
+}
+
 // ---- session (name + password auth) ----
 const TOKEN_KEY = 'emp_token';
 const NAME_KEY = 'emp_name';

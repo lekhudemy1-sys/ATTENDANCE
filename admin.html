@@ -185,10 +185,23 @@ function draw() {
         '<tr><td><strong>' + esc(e.name) + '</strong></td><td>' +
         (e.registered ? pill('approved', 'registered') : pill('pending', 'not registered')) +
         '</td><td>' +
+        (e.registered ? '<button class="sm ghost" data-l="' + e.id + '">Clear login</button> ' : '') +
         (e.registered ? '<button class="sm ghost" data-r="' + e.id + '">Reset password</button> ' : '') +
         '<button class="sm bad" data-d="' + e.id + '">Delete</button></td></tr>'
       ).join('')
     : '<tr><td colspan="3" class="muted">No employees yet</td></tr>';
+
+  document.querySelectorAll('[data-l]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('Log this employee out of all devices?')) return;
+      setBusy(b, true);
+      const { error } = await rpc('admin_clear_sessions', { p_id: b.dataset.l });
+      setBusy(b, false);
+      if (error) alert(error.message);
+      else alert('Employee logged out of all devices.');
+      load();
+    };
+  });
 
   document.querySelectorAll('[data-d]').forEach((b) => {
     b.onclick = async () => {
@@ -233,7 +246,9 @@ function rec() {
   const r = rows();
   $('ab').innerHTML = r.length
     ? r.map((a) =>
-        '<tr><td>' + esc(a.date) + '</td><td>' + esc(a.time) + '</td><td>' + esc(a.name) + '</td><td>' +
+        '<tr><td>' + esc(a.date) + '</td><td>' + esc(a.time) +
+        (a.auto_signout ? ' <span class="muted">(auto)</span>' : '') +
+        '</td><td>' + esc(a.name) + '</td><td>' +
         pill(a.status === 'sign_in' ? 'signed_in' : 'signed_out', a.status.replace('_', ' ')) + '</td></tr>'
       ).join('')
     : '<tr><td colspan="4" class="muted">No records</td></tr>';
@@ -263,8 +278,8 @@ function rec() {
 
 $('csv').onclick = () => {
   const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const t = ['Date,Time,Employee,Status']
-    .concat(rows().map((a) => [a.date, a.time, a.name, a.status].map(q).join(',')))
+  const t = ['Date,Time,Employee,Status,Auto']
+    .concat(rows().map((a) => [a.date, a.time, a.name, a.status, a.auto_signout ? 'yes' : 'no'].map(q).join(',')))
     .join('\n');
   const u = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a');

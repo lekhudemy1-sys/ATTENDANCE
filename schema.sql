@@ -1,13 +1,12 @@
 -- ============================================================
--- Prithvi Realcon Transport — simple name + password auth
--- Run this in Supabase SQL editor.
+-- Prithvi Realcon Transport — Attendance System
+-- Run this in Supabase SQL editor (replaces previous schema).
 --
 -- No email. No Supabase Auth for employees.
 -- Admin adds a name → employee registers with that name + password
 -- → login with name + password.
 -- ============================================================
 
--- Enable password hashing (Supabase puts it in the "extensions" schema)
 create extension if not exists pgcrypto with schema extensions;
 
 -- ---------- tables ----------
@@ -15,10 +14,11 @@ create table if not exists employees (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   password_hash text,                          -- null = not registered yet
+  active boolean not null default true,
+  notes text,
   created_at timestamptz default now()
 );
 
--- Case-insensitive unique name
 create unique index if not exists employees_name_unique
   on employees (lower(trim(name)));
 
@@ -34,11 +34,12 @@ create table if not exists config (
   value text
 );
 
--- CHANGE THIS after first deploy
 insert into config values ('admin_password', 'CHANGE_ME_NOW') on conflict do nothing;
 insert into config values ('office_lat', '21.2758151') on conflict do nothing;
 insert into config values ('office_lng', '81.6322723') on conflict do nothing;
 insert into config values ('office_radius_m', '50') on conflict do nothing;
+insert into config values ('company_name', 'Prithvi Realcon Transport') on conflict do nothing;
+insert into config values ('lunch_minutes', '60') on conflict do nothing;
 
 create table if not exists attendance (
   id uuid primary key default gen_random_uuid(),
@@ -48,6 +49,8 @@ create table if not exists attendance (
   status text not null check (status in ('sign_in', 'sign_out')),
   lat float,
   lng float,
+  note text,
+  source text not null default 'self' check (source in ('self', 'admin')),
   created_at timestamptz default now(),
   unique (employee_id, date, status)
 );
@@ -69,17 +72,14 @@ create table if not exists leave_requests (
   check (end_date >= start_date)
 );
 
--- Drop old unused table if present
 drop table if exists time_change_requests;
 
--- ---------- RLS (all access via security-definer functions) ----------
+-- ---------- RLS ----------
 alter table employees enable row level security;
 alter table sessions enable row level security;
 alter table config enable row level security;
 alter table attendance enable row level security;
 alter table leave_requests enable row level security;
-
--- No direct client policies — everything goes through RPCs below.
 
 -- ---------- helpers ----------
 create or replace function cfg(k text) returns text
@@ -106,16 +106,14 @@ create or replace function on_leave(e uuid, d date) returns boolean
   )
 $$;
 
--- Resolve employee from session token (passed by client)
 create or replace function emp_from_token(tok uuid) returns uuid
   language sql security definer set search_path = public as $$
   select employee_id from sessions
   where token = tok and expires_at > now()
 $$;
 
--- ---------- employee auth (name + password) ----------
+-- ---------- employee auth ----------
 
--- Register: name must already exist (added by admin) and not yet have a password
 create or replace function emp_register(p_name text, p_password text) returns json
   language plpgsql security definer set search_path = public, extensions as $$
 declare
@@ -130,7 +128,7 @@ begin
     raise exception 'Password must be at least 4 characters';
   end if;
 
-  select * into e from employees where lower(trim(name)) = n;
+  select * into e from employees where lower(trim(name)) = n and active = true;
   if not found then
     raise exception 'This name is not registered by admin. Ask admin to add you first.';
   end if;
@@ -142,14 +140,12 @@ begin
   set password_hash = crypt(p_password, gen_salt('bf'))
   where id = e.id;
 
-  -- auto-login after register
   insert into sessions (employee_id) values (e.id)
   returning token into tok;
 
   return json_build_object('token', tok, 'name', e.name, 'id', e.id);
 end $$;
 
--- Login with name + password
 create or replace function emp_login(p_name text, p_password text) returns json
   language plpgsql security definer set search_path = public, extensions as $$
 declare
@@ -168,6 +164,9 @@ begin
   if not found then
     raise exception 'Wrong name or password';
   end if;
+  if e.active is not true then
+    raise exception 'Account is deactivated. Contact admin.';
+  end if;
   if e.password_hash is null then
     raise exception 'Account not created yet. Use "Create account" first.';
   end if;
@@ -175,7 +174,6 @@ begin
     raise exception 'Wrong name or password';
   end if;
 
-  -- clean expired sessions
   delete from sessions where employee_id = e.id and expires_at < now();
 
   insert into sessions (employee_id) values (e.id)
@@ -184,14 +182,12 @@ begin
   return json_build_object('token', tok, 'name', e.name, 'id', e.id);
 end $$;
 
--- Logout (invalidate token)
 create or replace function emp_logout(p_token uuid) returns void
   language plpgsql security definer set search_path = public as $$
 begin
   delete from sessions where token = p_token;
 end $$;
 
--- Who am I
 create or replace function emp_me(p_token uuid) returns json
   language plpgsql security definer set search_path = public as $$
 declare
@@ -202,6 +198,7 @@ begin
   join sessions s on s.employee_id = emp.id
   where s.token = p_token and s.expires_at > now();
   if not found then raise exception 'Not logged in'; end if;
+  if e.active is not true then raise exception 'Account deactivated'; end if;
   return json_build_object('id', e.id, 'name', e.name);
 end $$;
 
@@ -270,8 +267,8 @@ begin
     raise exception 'Bad request';
   end if;
 
-  insert into attendance (employee_id, date, time, status, lat, lng)
-  values (e, d, t, p_kind, nullif(p_lat, 0), nullif(p_lng, 0));
+  insert into attendance (employee_id, date, time, status, lat, lng, source)
+  values (e, d, t, p_kind, nullif(p_lat, 0), nullif(p_lng, 0), 'self');
 
   return initcap(replace(p_kind, '_', ' ')) || ' successful at ' || t;
 end $$;
@@ -357,14 +354,21 @@ create or replace function admin_data(pw text) returns json
 begin
   perform chk(pw);
   return json_build_object(
+    'config', (
+      select coalesce(json_object_agg(key, value), '{}'::json)
+      from config
+      where key in ('office_lat', 'office_lng', 'office_radius_m', 'company_name', 'lunch_minutes')
+    ),
     'employees', (
       select coalesce(json_agg(
         json_build_object(
           'id', e.id,
           'name', e.name,
           'registered', (e.password_hash is not null),
+          'active', e.active,
+          'notes', e.notes,
           'created_at', e.created_at
-        ) order by e.name
+        ) order by e.active desc, e.name
       ), '[]')
       from employees e
     ),
@@ -381,12 +385,36 @@ begin
     'attendance', (
       select coalesce(json_agg(a), '[]')
       from (
-        select a.id, a.date, a.time, a.status, emp.name
+        select a.id, a.date, a.time, a.status, a.lat, a.lng, a.note, a.source, emp.name, emp.id as employee_id
         from attendance a
         join employees emp on emp.id = a.employee_id
         order by a.date desc, a.time desc
-        limit 5000
+        limit 8000
       ) a
+    ),
+    'today_summary', (
+      select json_build_object(
+        'date', ist_today(),
+        'present', (
+          select count(distinct employee_id) from attendance
+          where date = ist_today() and status = 'sign_in'
+        ),
+        'on_leave', (
+          select count(distinct employee_id) from leave_requests
+          where status = 'approved' and ist_today() between start_date and end_date
+        ),
+        'pending_leaves', (
+          select count(*) from leave_requests where status = 'pending'
+        ),
+        'open_shifts', (
+          select count(*) from attendance a
+          where a.date = ist_today() and a.status = 'sign_in'
+            and not exists (
+              select 1 from attendance b
+              where b.employee_id = a.employee_id and b.date = a.date and b.status = 'sign_out'
+            )
+        )
+      )
     )
   );
 end $$;
@@ -412,7 +440,6 @@ begin
   end if;
 end $$;
 
--- Admin only adds a name (no email)
 create or replace function admin_add_employee(pw text, p_name text) returns void
   language plpgsql security definer set search_path = public as $$
 declare
@@ -436,11 +463,102 @@ begin
   delete from employees where id = p_id;
 end $$;
 
--- Admin can reset an employee's password so they can register again
 create or replace function admin_reset_password(pw text, p_id uuid) returns void
   language plpgsql security definer set search_path = public as $$
 begin
   perform chk(pw);
   update employees set password_hash = null where id = p_id;
   delete from sessions where employee_id = p_id;
+end $$;
+
+-- Toggle employee active / inactive
+create or replace function admin_set_employee_active(pw text, p_id uuid, p_active boolean) returns void
+  language plpgsql security definer set search_path = public as $$
+begin
+  perform chk(pw);
+  update employees set active = coalesce(p_active, true) where id = p_id;
+  if not coalesce(p_active, true) then
+    delete from sessions where employee_id = p_id;
+  end if;
+end $$;
+
+-- Update employee notes
+create or replace function admin_set_employee_notes(pw text, p_id uuid, p_notes text) returns void
+  language plpgsql security definer set search_path = public as $$
+begin
+  perform chk(pw);
+  update employees set notes = nullif(trim(p_notes), '') where id = p_id;
+end $$;
+
+-- Manual attendance correction by admin
+create or replace function admin_set_attendance(
+  pw text,
+  p_employee_id uuid,
+  p_date date,
+  p_sign_in time,
+  p_sign_out time,
+  p_note text default null
+) returns void
+  language plpgsql security definer set search_path = public as $$
+begin
+  perform chk(pw);
+  if p_employee_id is null or p_date is null then
+    raise exception 'Employee and date required';
+  end if;
+  if p_sign_in is null and p_sign_out is null then
+    raise exception 'Provide at least one of sign-in or sign-out time';
+  end if;
+  if p_sign_in is not null and p_sign_out is not null and p_sign_out < p_sign_in then
+    raise exception 'Sign-out cannot be before sign-in';
+  end if;
+
+  if p_sign_in is not null then
+    insert into attendance (employee_id, date, time, status, source, note)
+    values (p_employee_id, p_date, p_sign_in, 'sign_in', 'admin', nullif(trim(p_note), ''))
+    on conflict (employee_id, date, status) do update
+      set time = excluded.time, source = 'admin', note = coalesce(excluded.note, attendance.note);
+  end if;
+
+  if p_sign_out is not null then
+    insert into attendance (employee_id, date, time, status, source, note)
+    values (p_employee_id, p_date, p_sign_out, 'sign_out', 'admin', nullif(trim(p_note), ''))
+    on conflict (employee_id, date, status) do update
+      set time = excluded.time, source = 'admin', note = coalesce(excluded.note, attendance.note);
+  end if;
+end $$;
+
+-- Clear a day's attendance for an employee
+create or replace function admin_clear_attendance(pw text, p_employee_id uuid, p_date date) returns void
+  language plpgsql security definer set search_path = public as $$
+begin
+  perform chk(pw);
+  delete from attendance where employee_id = p_employee_id and date = p_date;
+end $$;
+
+-- Update office / system config
+create or replace function admin_update_config(pw text, p_key text, p_value text) returns void
+  language plpgsql security definer set search_path = public as $$
+begin
+  perform chk(pw);
+  if p_key not in ('office_lat', 'office_lng', 'office_radius_m', 'company_name', 'lunch_minutes') then
+    raise exception 'Invalid config key';
+  end if;
+  if p_key in ('office_lat', 'office_lng', 'office_radius_m', 'lunch_minutes') then
+    if p_value is null or p_value !~ '^-?[0-9]+(\.[0-9]+)?$' then
+      raise exception 'Numeric value required for %', p_key;
+    end if;
+  end if;
+  insert into config (key, value) values (p_key, p_value)
+  on conflict (key) do update set value = excluded.value;
+end $$;
+
+-- Change admin password
+create or replace function admin_change_password(pw text, p_new_password text) returns void
+  language plpgsql security definer set search_path = public as $$
+begin
+  perform chk(pw);
+  if p_new_password is null or length(trim(p_new_password)) < 6 then
+    raise exception 'New password must be at least 6 characters';
+  end if;
+  update config set value = trim(p_new_password) where key = 'admin_password';
 end $$;

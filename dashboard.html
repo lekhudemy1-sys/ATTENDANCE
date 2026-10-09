@@ -37,6 +37,7 @@
 
       <button class="orb" id="inBtn" style="display:none">Sign In</button>
       <button class="orb alt" id="outBtn" style="display:none">Sign Out</button>
+      <p class="muted center" style="margin-top:14px">Location must be on. You must be at the office to Sign In and Sign Out.</p>
       <div id="status" class="status"></div>
     </div>
   </div>
@@ -86,8 +87,10 @@ async function load() {
   signOut = data.sign_out || '';
   $('st').className = 'pill ' + data.status;
   $('st').textContent = LABEL[data.status] || data.status;
-  $('tm').textContent = [data.sign_in && 'In ' + data.sign_in, data.sign_out && 'Out ' + data.sign_out]
-    .filter(Boolean).join('  ·  ');
+  $('tm').textContent = [
+    data.sign_in && 'In ' + data.sign_in,
+    data.sign_out && 'Out ' + data.sign_out,
+  ].filter(Boolean).join('  ·  ');
   $('inBtn').style.display = data.status === 'none' ? 'block' : 'none';
   $('outBtn').style.display = data.status === 'signed_in' ? 'block' : 'none';
   tick();
@@ -101,43 +104,36 @@ async function mark(kind) {
   marking = true;
   const btn = kind === 'sign_in' ? $('inBtn') : $('outBtn');
   setBusy(btn, true);
-
-  const go = async (la, ln) => {
-    try {
-      const { data, error } = await sb.rpc('mark_attendance', {
-        p_token: token, p_kind: kind, p_lat: la, p_lng: ln,
-      });
-      await load();
-      msg(esc(error ? error.message : data), error ? 'error' : 'success');
-    } finally {
-      marking = false;
-      setBusy(btn, false);
-    }
-  };
-
-  if (kind === 'sign_out') {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (p) => go(p.coords.latitude, p.coords.longitude),
-        () => go(0, 0),
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      );
-    } else go(0, 0);
-    return;
-  }
-
-  if (!navigator.geolocation) {
+  const release = () => {
     marking = false;
     setBusy(btn, false);
-    return msg('Location not supported on this device.', 'error');
+  };
+
+  if (!navigator.geolocation) {
+    release();
+    return msg('Location is required, but this device does not support it.', 'error');
   }
+
   msg('Checking your location…', 'info');
   navigator.geolocation.getCurrentPosition(
-    (p) => go(p.coords.latitude, p.coords.longitude),
+    async (p) => {
+      try {
+        const { data, error } = await sb.rpc('mark_attendance', {
+          p_token: token,
+          p_kind: kind,
+          p_lat: p.coords.latitude,
+          p_lng: p.coords.longitude,
+          p_device: getDeviceId(),
+        });
+        await load();
+        msg(esc(error ? error.message : data), error ? 'error' : 'success');
+      } finally {
+        release();
+      }
+    },
     () => {
-      marking = false;
-      setBusy(btn, false);
-      msg('Location access denied. Please allow location to Sign In.', 'error');
+      release();
+      msg('Location access denied. Location is required to Sign In and Sign Out. Please allow location and try again.', 'error');
     },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
   );
@@ -158,6 +154,8 @@ async function mark(kind) {
 
   await load();
   setInterval(tick, 1000);
+  // refresh status every minute (picks up the 23:59 auto sign-out)
+  setInterval(load, 60 * 1000);
   setInterval(async () => {
     const { data } = await sb.rpc('day_info', { p_token: token });
     if (data?.now) off = new Date(data.now).getTime() - Date.now();
