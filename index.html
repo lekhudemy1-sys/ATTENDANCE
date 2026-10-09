@@ -73,6 +73,7 @@ $('go').onclick = async () => {
     const { data, error } = await sb.rpc(signup ? 'emp_register' : 'emp_login', {
       p_name: name,
       p_password: password,
+      p_device: getDeviceId(),
     });
     if (error) return msg(esc(error.message), 'error');
     saveSession(data.token, data.name);
