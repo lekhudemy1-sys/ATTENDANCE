@@ -460,7 +460,7 @@ function route() {
   timers = [];
   const h = (location.hash || '').replace(/^#\/?/, '');
   if (h === 'admin') return adminInit();
-  if (h === 'login') return loginInit();
+  if (h === 'login') return getToken() ? go('#/') : loginInit();   // already logged in -> straight to dashboard
   if (!getToken()) return go('#/login');
   if (h === 'leave') return leaveInit();
   return dashInit();
