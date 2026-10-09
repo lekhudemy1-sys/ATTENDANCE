@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Attendance — Prithvi Realcon Transport</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f3f0e8;--card:#fffdf8;--soft:#eee9dc;--ink:#14201b;--muted:#7b867f;--line:#e6e1d4;
+  --accent:#e8590c;--accent-soft:#fde8da;--ok:#2f7d4f;--ok-soft:#dff0e5;--bad:#c93a2b;--bad-soft:#f9e1de;--warn:#b7791f;--warn-soft:#faefd4;
+  --shadow:0 1px 2px #14201b0d,0 18px 40px -18px #14201b26;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0e1411;--card:#151d19;--soft:#1c2621;--ink:#eef2ee;--muted:#8a968f;--line:#25312b;
+  --accent:#ff7a2f;--accent-soft:#3a2416;--ok:#5fbf85;--ok-soft:#173224;--bad:#ff6b5a;--bad-soft:#3a1b18;--warn:#e0a83f;--warn-soft:#38290f;
+  --shadow:0 18px 40px -18px #000a}}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Sora',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;padding:22px 16px 48px;line-height:1.45;
+  background-image:radial-gradient(circle at 100% 0,var(--accent-soft),transparent 38%)}
+.shell{max-width:440px;margin:0 auto}.shell.wide{max-width:1040px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);margin:0 auto 16px;max-width:440px;overflow:hidden}
+.card.wide{max-width:none}
+.in{padding:26px}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.brand .mark{width:42px;height:42px;border-radius:13px;background:var(--ink);color:var(--card);display:grid;place-items:center;flex:none}
+.brand b{display:block;font-size:15px;letter-spacing:-.2px}
+.brand small{color:var(--muted);font-size:11px;letter-spacing:1.6px;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
+h1{font-size:26px;letter-spacing:-.8px;font-weight:600;margin-bottom:4px}
+h2{font-size:15px;font-weight:600;letter-spacing:-.2px;margin-bottom:14px}
+.sub{color:var(--muted);font-size:14px;margin-bottom:8px}
+.muted{color:var(--muted);font-size:12.5px}.center{text-align:center}
+.road{height:2px;margin:20px 0;background:repeating-linear-gradient(90deg,var(--accent) 0 14px,transparent 14px 26px);opacity:.75;border-radius:2px}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:14px 0 6px;letter-spacing:.3px}
+input,select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:13px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px;outline:0;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+textarea{resize:vertical}
+.pwrap{position:relative}.pwrap input{padding-right:64px}
+.pwrap button{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;color:var(--muted);padding:8px 10px;font-size:12px}
+button{padding:13px 18px;border:0;border-radius:13px;font:inherit;font-weight:600;font-size:14.5px;cursor:pointer;background:var(--ink);color:var(--card);transition:transform .12s,opacity .15s}
+button:active{transform:scale(.97)}button:disabled{opacity:.45;cursor:default}
+button.accent{background:var(--accent);color:#fff}
+button.ghost{background:var(--soft);color:var(--ink)}
+button.ok{background:var(--ok-soft);color:var(--ok)}button.bad{background:var(--bad-soft);color:var(--bad)}
+button.sm{padding:7px 12px;font-size:12px;border-radius:10px}
+.full{width:100%;margin-top:20px}
+.orb{display:block;width:176px;height:176px;border-radius:50%;margin:26px auto 6px;font-size:19px;letter-spacing:-.3px;background:var(--accent);color:#fff;
+  box-shadow:0 0 0 10px var(--accent-soft),0 18px 30px -10px #e8590c88}
+.orb.alt{background:var(--ink);color:var(--card);box-shadow:0 0 0 10px var(--soft),0 18px 30px -10px #0006}
+.orb:active{transform:scale(.95)}
+.clock{font-family:'JetBrains Mono',monospace;font-size:46px;font-weight:500;letter-spacing:-2px;text-align:center;margin-top:6px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:99px;font-size:12px;font-weight:600;background:var(--soft);color:var(--muted)}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill.pending,.pill.signed_in{background:var(--warn-soft);color:var(--warn)}
+.pill.approved,.pill.signed_out{background:var(--ok-soft);color:var(--ok)}
+.pill.rejected,.pill.cancelled{background:var(--bad-soft);color:var(--bad)}
+.pill.leave{background:var(--accent-soft);color:var(--accent)}
+.avatar{width:46px;height:46px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:600;flex:none}
+.hello{display:flex;align-items:center;gap:12px}
+.today{text-align:center;margin-top:16px}
+.worked{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted);margin-top:6px}
+.status{display:none;margin-top:16px;padding:12px 14px;border-radius:12px;font-size:13.5px;background:var(--soft);white-space:pre-line;word-break:break-word}
+.status.success{background:var(--ok-soft);color:var(--ok)}.status.error{background:var(--bad-soft);color:var(--bad)}.status.info{background:var(--accent-soft);color:var(--accent)}
+.nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+a{color:var(--muted);font-size:13px;text-decoration:none;font-weight:600;cursor:pointer}a:hover{color:var(--accent)}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:12px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:1px;text-transform:uppercase}tr:last-child td{border-bottom:0}
+td .muted{white-space:normal}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1;min-width:130px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0 18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}
+.stat b{display:block;font-size:28px;letter-spacing:-1px;font-weight:600}
+.stat span{font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.stat.hot b{color:var(--accent)}
+.tabs{display:flex;gap:6px;background:var(--soft);padding:5px;border-radius:15px;margin-bottom:16px;width:fit-content;max-width:100%;overflow-x:auto}
+.tabs button{background:none;color:var(--muted);padding:9px 16px;font-size:13px}
+.tabs button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px #0002}
+.pane{display:none}.pane.on{display:block}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:middle}
+.dot.on{background:var(--ok)}
+.dev{display:block;font-size:12px;color:var(--muted);white-space:normal}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.hint{color:var(--muted);font-size:12px;margin-top:5px;white-space:normal}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:min(92vw,520px);padding:13px 18px;border-radius:14px;font-size:13.5px;
+  background:var(--ink);color:var(--card);box-shadow:var(--shadow);z-index:50;white-space:pre-line}
+#toast.error{background:var(--bad);color:#fff}#toast.success{background:var(--ok);color:#fff}
+@media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}.in{padding:20px}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="toast" hidden></div>
+
+<!-- ============ EMPLOYEE LOGIN ============ -->
+<div class="shell" id="v-login" hidden>
+  <div class="card"><div class="in">
+    <div data-brand></div>
+    <h1 id="l-ttl">Welcome back</h1>
+    <p class="sub" id="l-sub">Log in to mark your attendance.</p>
+    <div class="road"></div>
+
+    <label for="l-nm">Name</label>
+    <input id="l-nm" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="As added by admin">
+
+    <label for="l-pw">Password</label>
+    <div class="pwrap">
+      <input id="l-pw" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Min. 4 characters">
+      <button type="button" id="l-eye">Show</button>
+    </div>
+
+    <button class="full accent" id="l-go">Log in</button>
+    <div id="st-login" class="status"></div>
+
+    <p class="center" style="margin-top:20px"><a id="l-tg">First time? Create your account</a></p>
+  </div></div>
+  <p class="center"><a href="#/admin">Admin login →</a></p>
+</div>
+
+<!-- ============ EMPLOYEE DASHBOARD ============ -->
+<div class="shell" id="v-dash" hidden>
+  <div class="card"><div class="in">
+    <div class="nav">
+      <div data-brand style="margin:0"></div>
+      <a id="d-logout">Log out</a>
+    </div>
+    <div class="hello">
+      <div class="avatar" id="d-av">·</div>
+      <div>
+        <div class="muted" id="d-gr">Hello</div>
+        <h1 id="d-nm" style="margin:0;font-size:22px">…</h1>
+      </div>
+    </div>
+    <div class="road"></div>
+    <div class="clock" id="d-clk">--:--:--</div>
+    <p class="muted center" id="d-dt"></p>
+    <div class="today"><span id="d-st" class="pill">…</span></div>
+    <p class="muted center" id="d-tm" style="margin-top:8px"></p>
+    <p class="worked center" id="d-wk"></p>
+    <button class="orb" id="d-in" hidden>Sign In</button>
+    <button class="orb alt" id="d-out" hidden>Sign Out</button>
+    <p class="muted center" style="margin-top:14px">Location must be on. You must be at the office to Sign In and Sign Out.</p>
+    <p class="muted center" id="d-leavenote" style="margin-top:10px;color:var(--bad)" hidden>You are on approved leave today. Cancel your leave before marking attendance.</p>
+    <div id="st-dash" class="status"></div>
+  </div></div>
+  <p class="center"><a href="#/leave">Apply for leave →</a></p>
+</div>
+
+<!-- ============ LEAVE ============ -->
+<div class="shell" id="v-leave" hidden>
+  <div class="nav">
+    <a href="#/">← Dashboard</a>
+    <a id="v-leave-logout">Log out</a>
+  </div>
+  <div class="card"><div class="in">
+    <h1>Apply for leave</h1>
+    <p class="sub">Your request goes to admin for approval.</p>
+    <div class="road"></div>
+    <label for="lv-ty">Leave type</label>
+    <select id="lv-ty">
+      <option value="single_day">Single day</option>
+      <option value="long_leave">Long leave</option>
+    </select>
+    <label for="lv-sd">Start date</label>
+    <input type="date" id="lv-sd">
+    <div id="lv-edw" hidden>
+      <label for="lv-ed">End date</label>
+      <input type="date" id="lv-ed">
+    </div>
+    <label for="lv-rs">Reason (optional)</label>
+    <textarea id="lv-rs" rows="2" maxlength="500" placeholder="e.g. family function"></textarea>
+    <button class="full accent" id="lv-go">Submit request</button>
+    <div id="st-leave" class="status"></div>
+  </div></div>
+  <div class="card"><div class="in">
+    <h2>My requests</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Dates</th><th>Status</th><th></th></tr></thead>
+      <tbody id="lv-list"></tbody>
+    </table></div>
+  </div></div>
+</div>
+
+<!-- ============ ADMIN LOGIN ============ -->
+<div class="shell" id="v-alogin" hidden>
+  <div class="card"><div class="in">
+    <div data-brand></div>
+    <h1>Admin login</h1>
+    <p class="sub">Attendance console access.</p>
+    <div class="road"></div>
+    <label for="a-pw">Password</label>
+    <input id="a-pw" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <button class="full accent" id="a-go">Log in</button>
+    <div id="st-alogin" class="status"></div>
+    <p class="center" style="margin-top:20px"><a href="#/login">← Employee login</a></p>
+  </div></div>
+</div>
+
+<!-- ============ ADMIN CONSOLE ============ -->
+<div class="shell wide" id="v-admin" hidden>
+  <div class="top">
+    <div data-brand style="margin:0"></div>
+    <a id="a-out">Log out</a>
+  </div>
+  <h1 style="margin:14px 0 4px">Attendance console</h1>
+  <div class="road"></div>
+
+  <div class="stats">
+    <div class="stat"><b id="s1">0</b><span>Team</span></div>
+    <div class="stat"><b id="s2">0</b><span>In today</span></div>
+    <div class="stat"><b id="s3">0</b><span>On leave</span></div>
+    <div class="stat hot"><b id="s4">0</b><span>Pending</span></div>
+  </div>
+
+  <div class="tabs">
+    <button class="on" data-tab="p1">Leaves</button>
+    <button data-tab="p2">Attendance</button>
+    <button data-tab="p3">Team</button>
+    <button data-tab="p4">Settings</button>
+  </div>
+
+  <div class="pane on" id="p1">
+    <div class="card wide"><div class="in">
+      <h2>Pending requests</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Employee</th><th>Dates</th><th>Reason</th><th></th></tr></thead>
+        <tbody id="pl"></tbody>
+      </table></div>
+    </div></div>
+    <div class="card wide"><div class="in">
+      <h2>History</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Employee</th><th>Dates</th><th>Status</th><th></th></tr></thead>
+        <tbody id="hl"></tbody>
+      </table></div>
+    </div></div>
+  </div>
+
+  <div class="pane" id="p2">
+    <div class="card wide"><div class="in">
+      <div class="row">
+        <input type="date" id="fd">
+        <select id="fs">
+          <option value="">All status</option>
+          <option value="sign_in">Sign In</option>
+          <option value="sign_out">Sign Out</option>
+        </select>
+        <select id="fe"><option value="">All employees</option></select>
+        <button id="csv" class="ghost">Export CSV</button>
+      </div>
+      <h2 style="margin-top:22px">Working hours</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Date</th><th>Employee</th><th>In</th><th>Out</th><th>Hours</th></tr></thead>
+        <tbody id="hb"></tbody>
+      </table></div>
+      <h2 style="margin-top:22px">Records</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Status</th></tr></thead>
+        <tbody id="ab"></tbody>
+      </table></div>
+    </div></div>
+    <div class="card wide"><div class="in">
+      <h2>Fix attendance manually</h2>
+      <p class="muted" style="margin-bottom:12px">For a forgotten Sign In / Sign Out. Leave a time empty to keep it unchanged.</p>
+      <div class="row">
+        <select id="m-emp"></select>
+        <input type="date" id="m-date">
+        <input type="time" id="m-in" title="Sign in time">
+        <input type="time" id="m-out" title="Sign out time">
+        <input type="text" id="m-note" placeholder="Note (optional)">
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="accent" data-act="att-save">Save</button>
+        <button class="bad" data-act="att-clear">Delete that day's records</button>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="pane" id="p3">
+    <div class="card wide"><div class="in">
+      <h2>Add employee</h2>
+      <p class="muted" style="margin-bottom:12px">Add only the name. The employee creates their own password.</p>
+      <div class="row">
+        <input id="nn" placeholder="Employee name" autocomplete="off">
+        <button id="add" class="accent" style="flex:0 0 auto">Add</button>
+      </div>
+      <div class="tw" style="margin-top:16px"><table>
+        <thead><tr><th>Name</th><th>Account</th><th>Logged in on</th><th></th></tr></thead>
+        <tbody id="eb"></tbody>
+      </table></div>
+    </div></div>
+  </div>
+
+  <div class="pane" id="p4">
+    <div class="card wide"><div class="in">
+      <h2>Office &amp; login rules</h2>
+      <div class="grid2" id="cfg-form"></div>
+      <div class="row" style="margin-top:16px">
+        <button class="ghost" id="cfg-here">Use my current location as office</button>
+        <button class="accent" id="cfg-save">Save settings</button>
+      </div>
+      <p class="hint">Stand inside the office and tap “Use my current location”, then Save. The office point is what everyone's GPS is measured against.</p>
+    </div></div>
+    <div class="card wide"><div class="in">
+      <h2>Change admin password</h2>
+      <div class="row">
+        <input type="password" id="np" placeholder="New password (min 8 characters)" autocomplete="new-password">
+        <button class="accent" style="flex:0 0 auto" data-act="pw-change">Change</button>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   CONFIG
+   ===================================================================== */
+const SB_URL = 'https://mwluvdedgdshbdnmyjyl.supabase.co';
+const SB_KEY = 'sb_publishable_pT4vjOCHqiiqZxZAcxHpjg_neX05R-M';
+const sb = supabase.createClient(SB_URL, SB_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+});
+
+/* =====================================================================
+   HELPERS
+   ===================================================================== */
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+const fmtDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+const fmtRange = (a, b) => fmtDate(a) + (b !== a ? ' → ' + fmtDate(b) : '');
+const initials = (n) => String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+const pill = (s, label) => '<span class="pill ' + esc(s) + '">' + esc(label || String(s).replace('_', ' ')) + '</span>';
+const toSec = (t) => { if (!t) return 0; const [a, b, c] = String(t).split(':').map(Number); return a * 3600 + b * 60 + (c || 0); };
+const hm = (s) => Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+const ago = (ts) => {
+  const m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
+  return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago';
+};
+
+// Inline status box (textContent only: no HTML injection)
+function say(id, text, type = 'info') {
+  const s = $(id);
+  if (!s) return;
+  if (!text) { s.style.display = 'none'; return; }
+  s.style.display = 'block';
+  s.className = 'status ' + type;
+  s.textContent = text;
+}
+let toastTimer;
+function toast(text, type = '') {
+  const t = $('toast');
+  t.textContent = text;
+  t.className = type;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, type === 'error' ? 7000 : 3500);
+}
+function setBusy(btn, busy) {
+  if (!btn) return;
+  btn.disabled = !!busy;
+  if (busy) { if (btn.dataset.label === undefined) { btn.dataset.label = btn.textContent; btn.textContent = 'Please wait…'; } }
+  else if (btn.dataset.label !== undefined) { btn.textContent = btn.dataset.label; delete btn.dataset.label; }
+}
+
+// Storage that never throws (private mode / in-app browsers can block it)
+function mkStore(area) {
+  const mem = {};
+  const use = (fn) => { try { return fn(window[area]); } catch (_) { return undefined; } };
+  return {
+    get: (k) => { const v = use((s) => s.getItem(k)); return v != null ? v : (mem[k] ?? null); },
+    set: (k, v) => { mem[k] = v; use((s) => s.setItem(k, v)); },
+    del: (k) => { delete mem[k]; use((s) => s.removeItem(k)); },
+  };
+}
+const store = mkStore('localStorage');
+const sstore = mkStore('sessionStorage');
+
+// Brand mark
+document.querySelectorAll('[data-brand]').forEach((el) => {
+  el.classList.add('brand');
+  el.innerHTML =
+    '<span class="mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">' +
+    '<path d="M8 21 10.5 3M16 21 13.5 3"/><path d="M12 5v3M12 11v3M12 17v3" stroke="#e8590c" stroke-width="2.2"/></svg></span>' +
+    '<span><b>Prithvi Realcon</b><small>Transport · PRTPL</small></span>';
+});
+
+/* =====================================================================
+   DEVICE + SESSION
+   ===================================================================== */
+function getDeviceId() {
+  let id = store.get('dev_id');
+  if (!id || id.length < 8) {
+    id = (window.crypto && crypto.randomUUID && crypto.randomUUID()) ||
+      Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    store.set('dev_id', id);
+  }
+  return id;
+}
+function deviceLabel() {
+  const u = navigator.userAgent || '';
+  const os = /iPhone|iPad|iPod/.test(u) ? 'iOS' : /Android/.test(u) ? 'Android' : /Windows/.test(u) ? 'Windows' : /Mac OS X/.test(u) ? 'Mac' : /Linux/.test(u) ? 'Linux' : 'Device';
+  const br = /EdgA?\//.test(u) ? 'Edge' : /OPR\/|Opera/.test(u) ? 'Opera' : /SamsungBrowser/.test(u) ? 'Samsung Internet'
+    : /CriOS|Chrome\//.test(u) ? 'Chrome' : /FxiOS|Firefox\//.test(u) ? 'Firefox' : /Safari\//.test(u) ? 'Safari' : 'Browser';
+  return br + ' · ' + os;
+}
+const getToken = () => store.get('emp_token') || '';
+const getEmpName = () => store.get('emp_name') || '';
+const saveSession = (t, n) => { store.set('emp_token', t); store.set('emp_name', n); };
+const clearSession = () => { store.del('emp_token'); store.del('emp_name'); };
+
+/* =====================================================================
+   API  (every error becomes a clear sentence)
+   ===================================================================== */
+function friendly(err) {
+  const m = String((err && err.message) || err || '');
+  if (/failed to fetch|networkerror|load failed|network request failed|fetch failed/i.test(m))
+    return 'Cannot reach the server. Check your internet connection and try again.';
+  if (/could not find the function|schema cache/i.test(m))
+    return 'The database is not on the latest version. Ask admin to run the newest schema.sql in Supabase.';
+  if (/jwt|apikey|invalid api key/i.test(m)) return 'The app could not authenticate with the database (invalid key).';
+  return m || 'Something went wrong. Please try again.';
+}
+async function rpc(fn, args) {
+  try {
+    const { data, error } = await sb.rpc(fn, args);
+    if (error) return { error: { message: friendly(error), code: error.code || '' } };
+    return { data };
+  } catch (e) {
+    return { error: { message: friendly(e), code: '' } };
+  }
+}
+const sessionEnded = (e) => e.code === 'AU001' || /^not logged in/i.test(e.message);
+
+let NOTICE = '';
+function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+// Returns true when the error ended the login (user is sent to login page)
+function handleErr(err) {
+  if (!sessionEnded(err)) return false;
+  clearSession();
+  NOTICE = err.message.replace(/^not logged in:\s*/i, '').replace(/^./, (c) => c.toUpperCase());
+  go('#/login');
+  return true;
+}
+
+/* =====================================================================
+   ROUTER
+   ===================================================================== */
+const VIEWS = ['v-login', 'v-dash', 'v-leave', 'v-alogin', 'v-admin'];
+function show(id) { VIEWS.forEach((v) => { $(v).hidden = v !== id; }); window.scrollTo(0, 0); }
+let timers = [];
+const every = (fn, ms) => timers.push(setInterval(fn, ms));
+
+function route() {
+  timers.forEach(clearInterval);
+  timers = [];
+  const h = (location.hash || '').replace(/^#\/?/, '');
+  if (h === 'admin') return adminInit();
+  if (h === 'login') return loginInit();
+  if (!getToken()) return go('#/login');
+  if (h === 'leave') return leaveInit();
+  return dashInit();
+}
+window.addEventListener('hashchange', route);
+window.addEventListener('storage', (e) => { if (e.key === 'emp_token') route(); });   // logged out in another tab
+document.addEventListener('visibilitychange', () => {                                  // refresh the moment the app is reopened
+  if (document.hidden) return;
+  const h = location.hash.replace(/^#\/?/, '');
+  if (h === 'admin' && sstore.get('adm_tok')) adminLoad(true);
+  else if (h === '' && getToken()) dashLoad();
+});
+
+/* =====================================================================
+   EMPLOYEE LOGIN
+   ===================================================================== */
+let signup = false;
+function loginInit() {
+  show('v-login');
+  setSignup(false);
+  $('l-pw').value = '';
+  say('st-login', NOTICE, 'error');
+  NOTICE = '';
+}
+function setSignup(on) {
+  signup = on;
+  $('l-go').textContent = on ? 'Create account' : 'Log in';
+  $('l-ttl').textContent = on ? 'Create account' : 'Welcome back';
+  $('l-sub').textContent = on ? 'Use the name your admin added, then choose a password.' : 'Log in to mark your attendance.';
+  $('l-pw').autocomplete = on ? 'new-password' : 'current-password';
+  $('l-tg').textContent = on ? 'Already have an account? Log in' : 'First time? Create your account';
+  say('st-login', '');
+}
+$('l-tg').onclick = () => setSignup(!signup);
+$('l-eye').onclick = () => {
+  const show = $('l-pw').type === 'password';
+  $('l-pw').type = show ? 'text' : 'password';
+  $('l-eye').textContent = show ? 'Hide' : 'Show';
+};
+$('l-go').onclick = async () => {
+  const name = $('l-nm').value.trim();
+  const password = $('l-pw').value;
+  if (!name) return say('st-login', 'Enter your name.', 'error');
+  if (!password) return say('st-login', 'Enter your password.', 'error');
+  if (signup && password.trim().length < 4) return say('st-login', 'Password must be at least 4 characters.', 'error');
+
+  setBusy($('l-go'), true);
+  say('st-login', 'Please wait…', 'info');
+  const { data, error } = await rpc(signup ? 'emp_register' : 'emp_login', {
+    p_name: name, p_password: password, p_device: getDeviceId(), p_device_label: deviceLabel(),
+  });
+  setBusy($('l-go'), false);
+  if (error) return say('st-login', error.message, 'error');
+  if (!data || !data.ok) return say('st-login', (data && data.message) || 'Login failed. Please try again.', 'error');
+  saveSession(data.token, data.name);
+  say('st-login', '');
+  $('l-pw').value = '';
+  go('#/');
+};
+$('l-pw').onkeydown = (e) => { if (e.key === 'Enter') $('l-go').click(); };
+$('l-nm').onkeydown = (e) => { if (e.key === 'Enter') $('l-pw').focus(); };
+
+async function logout() {
+  const t = getToken();
+  if (t) {
+    const { error } = await rpc('emp_logout', { p_token: t });
+    if (error && !confirm('Could not reach the server, so your login is still active there (it frees up on its own after a few idle minutes).\n\nLog out on this device anyway?')) return;
+  }
+  clearSession();
+  $('l-nm').value = '';          // never leave the previous person's name on the login form
+  $('l-pw').value = '';
+  go('#/login');
+}
+$('d-logout').onclick = logout;
+$('v-leave-logout').onclick = logout;
+
+/* =====================================================================
+   GEOLOCATION  (robust: best-of-several readings, then network fallback)
+   ===================================================================== */
+const GOOD_ACCURACY = 25;
+function inAppBrowser() { return /FBAN|FBAV|Instagram|MicroMessenger|WhatsApp|Snapchat|Line\/|; wv\)|GSA\//i.test(navigator.userAgent || ''); }
+
+function geoMessage(e) {
+  const hint = inAppBrowser() ? '\n\nYou seem to be inside another app (WhatsApp/Instagram/etc.). Open this page in Chrome or Safari instead.' : '';
+  switch (e && e.code) {
+    case 'UNSUPPORTED': return 'This browser cannot give your location. Open the page in Chrome (Android) or Safari (iPhone).' + hint;
+    case 'INSECURE': return 'Location only works on a secure (https) page. Open the https:// link of this app.';
+    case 1: case 'DENIED':
+      return 'Location permission is blocked for this site.\n• Android/Chrome: tap the lock icon in the address bar → Permissions → Location → Allow.\n• iPhone: Settings → Privacy & Security → Location Services → On, and set your browser (Safari Websites) to “While Using”.\nThen reload this page and try again.' + hint;
+    case 2: return 'Your device could not work out its location. Turn on Location/GPS (High accuracy mode), move near a window or outdoors, then try again.' + hint;
+    case 3: case 'TIMEOUT': return 'Getting your location took too long. Turn on Location/GPS (High accuracy mode), move near a window or outdoors, wait a few seconds and try again.' + hint;
+    default: return 'Could not get your location: ' + ((e && e.message) || 'unknown error') + hint;
+  }
+}
+
+async function getFix(onProgress) {
+  if (!('geolocation' in navigator)) throw { code: 'UNSUPPORTED' };
+  if (window.isSecureContext === false) throw { code: 'INSECURE' };
+  try {
+    const perm = navigator.permissions && (await navigator.permissions.query({ name: 'geolocation' }));
+    if (perm && perm.state === 'denied') throw { code: 'DENIED' };
+  } catch (e) { if (e && e.code === 'DENIED') throw e; }
+
+  // 1) high accuracy: watch for up to 12 s, keep the best reading
+  const watched = () => new Promise((resolve, reject) => {
+    let best = null, id, timer, lastErr = null;
+    const end = (err) => {
+      clearTimeout(timer);
+      try { navigator.geolocation.clearWatch(id); } catch (_) {}
+      best ? resolve(best) : reject(err || lastErr || { code: 3 });
+    };
+    id = navigator.geolocation.watchPosition(
+      (p) => {
+        if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
+        if (onProgress) onProgress(best.coords.accuracy);
+        if (best.coords.accuracy <= GOOD_ACCURACY) end();
+      },
+      (e) => { lastErr = e; if (e.code === 1) end(e); },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
+    timer = setTimeout(() => end(), 12000);
+  });
+  try {
+    return await watched();
+  } catch (e) {
+    if (e && e.code === 1) throw e;
+  }
+  // 2) fallback: network/Wi-Fi location (works indoors where GPS cannot lock)
+  return new Promise((resolve, reject) =>
+    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 }));
+}
+
+/* =====================================================================
+   EMPLOYEE DASHBOARD
+   ===================================================================== */
+const D = { off: 0, signIn: '', signOut: '', marking: false };
+const LABEL = { none: 'Not marked', signed_in: 'Signed in', signed_out: 'Signed out', leave: 'On leave' };
+
+function tick() {
+  const n = new Date(Date.now() + D.off);
+  $('d-clk').textContent = n.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' });
+  $('d-dt').textContent = n.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long' });
+  const h = +n.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
+  $('d-gr').textContent = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  if (D.signIn && D.signOut) $('d-wk').textContent = 'Total hours · ' + hm(Math.max(0, toSec(D.signOut) - toSec(D.signIn)));
+  else if (D.signIn) {
+    const s = toSec(n.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })) - toSec(D.signIn);
+    $('d-wk').textContent = s > 0 ? 'Working · ' + hm(s) : '';
+  } else $('d-wk').textContent = '';
+}
+
+// Doubles as the heartbeat: the server records "last seen" on every call.
+async function dashLoad() {
+  const { data, error } = await rpc('day_info', { p_token: getToken() });
+  if (error) {
+    if (handleErr(error)) return;
+    return say('st-dash', error.message, 'error');
+  }
+  D.off = new Date(data.now).getTime() - Date.now();
+  D.signIn = data.sign_in || '';
+  D.signOut = data.sign_out || '';
+  $('d-st').className = 'pill ' + data.status;
+  $('d-st').textContent = LABEL[data.status] || data.status;
+  $('d-tm').textContent = [data.sign_in && 'In ' + data.sign_in, data.sign_out && 'Out ' + data.sign_out].filter(Boolean).join('  ·  ');
+  $('d-in').hidden = data.status !== 'none';
+  $('d-out').hidden = data.status !== 'signed_in';
+  $('d-leavenote').hidden = data.status !== 'leave';
+  tick();
+}
+
+async function dashInit() {
+  show('v-dash');
+  say('st-dash', '');
+  const name = getEmpName();
+  $('d-nm').textContent = name || '…';
+  $('d-av').textContent = initials(name);
+  const { data: me, error } = await rpc('emp_me', { p_token: getToken() });
+  if (error) { if (handleErr(error)) return; say('st-dash', error.message, 'error'); }
+  else { $('d-nm').textContent = me.name; $('d-av').textContent = initials(me.name); }
+  await dashLoad();
+  every(tick, 1000);
+  every(dashLoad, 30 * 1000);     // heartbeat + picks up admin logout / 23:59 auto sign-out
+}
+
+async function mark(kind) {
+  if (D.marking) return;
+  D.marking = true;
+  const btn = $(kind === 'sign_in' ? 'd-in' : 'd-out');
+  setBusy(btn, true);
+  try {
+    say('st-dash', 'Getting your location… keep this screen open.', 'info');
+    let pos;
+    try {
+      pos = await getFix((a) => say('st-dash', 'Getting a precise location… accuracy ±' + Math.round(a) + ' m', 'info'));
+    } catch (e) {
+      return say('st-dash', geoMessage(e), 'error');
+    }
+    const c = pos.coords;
+    say('st-dash', 'Checking with the office…', 'info');
+    const { data, error } = await rpc('mark_attendance', {
+      p_token: getToken(), p_kind: kind, p_lat: c.latitude, p_lng: c.longitude,
+      p_device: getDeviceId(), p_accuracy: c.accuracy == null ? null : c.accuracy,
+    });
+    if (error && handleErr(error)) return;
+    await dashLoad();
+    say('st-dash', error ? error.message : data, error ? 'error' : 'success');
+  } finally {
+    D.marking = false;
+    setBusy(btn, false);
+  }
+}
+$('d-in').onclick = () => mark('sign_in');
+$('d-out').onclick = () => mark('sign_out');
+
+/* =====================================================================
+   LEAVE
+   ===================================================================== */
+function leaveInit() {
+  show('v-leave');
+  say('st-leave', '');
+  const t = todayIST();
+  $('lv-sd').min = $('lv-ed').min = $('lv-sd').value = $('lv-ed').value = t;
+  $('lv-ty').value = 'single_day';
+  $('lv-edw').hidden = true;
+  leaveList();
+}
+$('lv-ty').onchange = () => {
+  const long = $('lv-ty').value === 'long_leave';
+  $('lv-edw').hidden = !long;
+  if (!long) $('lv-ed').value = $('lv-sd').value;
+};
+$('lv-sd').onchange = () => {
+  if ($('lv-ty').value === 'single_day' || $('lv-ed').value < $('lv-sd').value) $('lv-ed').value = $('lv-sd').value;
+  $('lv-ed').min = $('lv-sd').value;
+};
+async function leaveList() {
+  const { data, error } = await rpc('my_leaves', { p_token: getToken() });
+  if (error) { if (handleErr(error)) return; return say('st-leave', error.message, 'error'); }
+  const t = todayIST();
+  const rows = data || [];
+  $('lv-list').innerHTML = rows.length
+    ? rows.map((l) => {
+        const can = l.status === 'pending' || (l.status === 'approved' && l.end_date >= t);
+        return '<tr><td><strong>' + esc(fmtRange(l.start_date, l.end_date)) + '</strong>' +
+          (l.reason ? '<br><span class="muted">' + esc(l.reason) + '</span>' : '') +
+          '</td><td>' + pill(l.status) + '</td><td>' +
+          (can ? '<button class="sm bad" data-act="lv-cancel" data-id="' + esc(l.id) + '">Cancel</button>' : '') + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="3" class="muted">No requests yet</td></tr>';
+}
+$('lv-go').onclick = async () => {
+  const single = $('lv-ty').value === 'single_day';
+  const s = $('lv-sd').value;
+  const e = single ? s : $('lv-ed').value;
+  if (!s || !e) return say('st-leave', 'Select the leave dates.', 'error');
+  if (e < s) return say('st-leave', 'End date cannot be before the start date.', 'error');
+  setBusy($('lv-go'), true);
+  const { error } = await rpc('request_leave', { p_token: getToken(), p_type: $('lv-ty').value, p_start: s, p_end: e, p_reason: $('lv-rs').value });
+  setBusy($('lv-go'), false);
+  if (error) { if (handleErr(error)) return; return say('st-leave', error.message, 'error'); }
+  $('lv-rs').value = '';
+  say('st-leave', 'Request submitted. Waiting for admin approval.', 'success');
+  leaveList();
+};
+
+/* =====================================================================
+   ADMIN
+   ===================================================================== */
+let A = null;               // last admin_data
+let cfgDrawn = false;
+const CFG = [
+  ['office_lat', 'Office latitude', 'number', ''],
+  ['office_lng', 'Office longitude', 'number', ''],
+  ['office_radius_m', 'Allowed distance from office (m)', 'number', 'Employees must be within this many metres.'],
+  ['accuracy_allowance_m', 'GPS error forgiven (m)', 'number', 'Phones are rarely exact. 0 = strict. Recommended 20.'],
+  ['max_accuracy_m', 'Reject GPS worse than (m)', 'number', 'Blocks very rough Wi-Fi/cell guesses.'],
+  ['max_devices', 'Devices per employee at once', 'number', 'How many phones one person can be logged in on together.'],
+  ['session_idle_minutes', 'Free a device slot after idle (min)', 'number', 'A closed/lost phone stops blocking login after this long.'],
+  ['one_device_one_employee', 'One phone = one employee per day', 'select', 'On: a phone that signed in for A today cannot log in as B.'],
+];
+
+const arpc = (fn, args = {}) => rpc(fn, { p_token: sstore.get('adm_tok') || '', ...args });
+function adminEnded(err) {
+  if (err.code !== 'AU002' && !/admin session expired/i.test(err.message)) return false;
+  sstore.del('adm_tok');
+  A = null; cfgDrawn = false;
+  show('v-alogin');
+  say('st-alogin', err.message, 'error');
+  return true;
+}
+
+function adminInit() {
+  if (!sstore.get('adm_tok')) { show('v-alogin'); say('st-alogin', ''); $('a-pw').value = ''; return; }
+  show('v-admin');
+  adminLoad();
+  every(() => { if (!document.hidden) adminLoad(true); }, 30 * 1000);   // live view of online devices & new records
+}
+
+async function adminLoad(quiet) {
+  const { data, error } = await arpc('admin_data');
+  if (error) {
+    if (adminEnded(error)) return;
+    return toast(error.message, 'error');
+  }
+  A = data;
+  draw();
+}
+
+$('a-go').onclick = async () => {
+  const pw = $('a-pw').value;
+  if (!pw) return say('st-alogin', 'Enter the admin password.', 'error');
+  setBusy($('a-go'), true);
+  const { data, error } = await rpc('admin_login', { pw });
+  setBusy($('a-go'), false);
+  if (error) return say('st-alogin', error.message, 'error');
+  if (!data || !data.ok) return say('st-alogin', (data && data.message) || 'Login failed.', 'error');
+  sstore.set('adm_tok', data.token);
+  $('a-pw').value = '';
+  say('st-alogin', '');
+  adminInit();
+};
+$('a-pw').onkeydown = (e) => { if (e.key === 'Enter') $('a-go').click(); };
+$('a-out').onclick = async () => {
+  const t = sstore.get('adm_tok');
+  sstore.del('adm_tok');
+  A = null; cfgDrawn = false;
+  if (t) await rpc('admin_logout', { p_token: t });
+  go('#/admin');
+};
+
+document.querySelectorAll('[data-tab]').forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.id === b.dataset.tab));
+  };
+});
+
+const dates = (l) => esc(fmtRange(l.start_date, l.end_date));
+const dur = (s) => (s < 0 ? '—' : hm(s));
+
+function draw() {
+  const today = todayIST();
+  const pend = A.leaves.filter((l) => l.status === 'pending');
+  $('s1').textContent = A.employees.length;
+  $('s2').textContent = new Set(A.attendance.filter((a) => a.date === today && a.status === 'sign_in').map((a) => a.employee_id)).size;
+  $('s3').textContent = A.leaves.filter((l) => l.status === 'approved' && l.start_date <= today && l.end_date >= today).length;
+  $('s4').textContent = pend.length;
+
+  $('pl').innerHTML = pend.length
+    ? pend.map((l) =>
+        '<tr><td><strong>' + esc(l.name) + '</strong></td><td>' + dates(l) + '</td><td class="muted">' + esc(l.reason || '—') +
+        '</td><td><button class="sm ok" data-act="leave-approve" data-id="' + esc(l.id) + '">Approve</button> ' +
+        '<button class="sm bad" data-act="leave-reject" data-id="' + esc(l.id) + '">Reject</button></td></tr>').join('')
+    : '<tr><td colspan="4" class="muted">All clear — nothing pending</td></tr>';
+
+  const hist = A.leaves.filter((l) => l.status !== 'pending');
+  $('hl').innerHTML = hist.length
+    ? hist.map((l) =>
+        '<tr><td><strong>' + esc(l.name) + '</strong></td><td>' + dates(l) + '</td><td>' + pill(l.status) +
+        (l.cancelled_by ? ' <span class="muted">by ' + esc(l.cancelled_by) + '</span>' : '') + '</td><td>' +
+        (l.status === 'approved' ? '<button class="sm bad" data-act="leave-cancel" data-id="' + esc(l.id) + '">Cancel leave</button>' : '') +
+        '</td></tr>').join('')
+    : '<tr><td colspan="4" class="muted">No history</td></tr>';
+
+  $('eb').innerHTML = A.employees.length
+    ? A.employees.map((e) => {
+        const id = ' data-id="' + esc(e.id) + '"';
+        const devs = (e.devices || []).length
+          ? e.devices.map((d) => '<span class="dev"><span class="dot' + (d.online ? ' on' : '') + '"></span>' + esc(d.label) +
+              ' · ' + (d.online ? 'online' : 'seen ' + esc(ago(d.last_seen))) + '</span>').join('')
+          : '<span class="muted">—</span>';
+        return '<tr><td><strong>' + esc(e.name) + '</strong></td><td>' +
+          (e.active ? (e.registered ? pill('approved', 'registered') : pill('pending', 'not registered')) : pill('rejected', 'deactivated')) +
+          '</td><td>' + devs + '</td><td>' +
+          ((e.devices || []).length ? '<button class="sm ghost" data-act="emp-logout"' + id + '>Log out everywhere</button> ' : '') +
+          (e.registered ? '<button class="sm ghost" data-act="emp-reset"' + id + '>Reset password</button> ' : '') +
+          '<button class="sm ghost" data-act="emp-active" data-on="' + (e.active ? '0' : '1') + '"' + id + '>' + (e.active ? 'Deactivate' : 'Activate') + '</button> ' +
+          '<button class="sm bad" data-act="emp-del"' + id + '>Delete</button></td></tr>';
+      }).join('')
+    : '<tr><td colspan="4" class="muted">No employees yet</td></tr>';
+
+  // employee pickers (keep current choice)
+  const opts = A.employees.map((e) => '<option value="' + esc(e.id) + '">' + esc(e.name) + '</option>').join('');
+  const keepF = $('fe').value, keepM = $('m-emp').value;
+  $('fe').innerHTML = '<option value="">All employees</option>' + A.employees.map((e) => '<option>' + esc(e.name) + '</option>').join('');
+  $('fe').value = keepF;
+  $('m-emp').innerHTML = opts;
+  if (keepM) $('m-emp').value = keepM;
+  if (!$('m-date').value) $('m-date').value = today;
+
+  if (!cfgDrawn) drawCfg();
+  rec();
+}
+
+function drawCfg() {
+  cfgDrawn = true;
+  $('cfg-form').innerHTML = CFG.map(([k, label, type, hint]) => {
+    const v = (A.config && A.config[k]) || '';
+    const field = type === 'select'
+      ? '<select id="cfg-' + k + '"><option value="on"' + (v === 'on' ? ' selected' : '') + '>On</option><option value="off"' + (v === 'off' ? ' selected' : '') + '>Off</option></select>'
+      : '<input id="cfg-' + k + '" type="text" inputmode="decimal" value="' + esc(v) + '">';
+    return '<div><label for="cfg-' + k + '">' + esc(label) + '</label>' + field + (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div>';
+  }).join('');
+}
+
+const rows = () => A.attendance.filter((a) =>
+  (!$('fd').value || a.date === $('fd').value) && (!$('fs').value || a.status === $('fs').value) && (!$('fe').value || a.name === $('fe').value));
+
+function rec() {
+  const r = rows();
+  $('ab').innerHTML = r.length
+    ? r.map((a) => '<tr><td>' + esc(a.date) + '</td><td>' + esc(a.time) +
+        (a.auto_signout ? ' <span class="muted">(auto)</span>' : a.source === 'admin' ? ' <span class="muted">(admin)</span>' : '') +
+        '</td><td>' + esc(a.name) + '</td><td>' + pill(a.status === 'sign_in' ? 'signed_in' : 'signed_out', a.status.replace('_', ' ')) + '</td></tr>').join('')
+    : '<tr><td colspan="4" class="muted">No records</td></tr>';
+
+  const g = {};
+  r.forEach((a) => { const k = a.date + '|' + a.employee_id; (g[k] = g[k] || { date: a.date, name: a.name })[a.status] = a.time; });
+  const list = Object.values(g);
+  $('hb').innerHTML = list.length
+    ? list.map((x) => {
+        let hours = '—';
+        if (x.sign_in && x.sign_out) hours = dur(toSec(x.sign_out) - toSec(x.sign_in));
+        else if (x.sign_in) hours = 'Still in';
+        return '<tr><td>' + esc(x.date) + '</td><td><strong>' + esc(x.name) + '</strong></td><td>' + esc(x.sign_in || '—') +
+          '</td><td>' + esc(x.sign_out || '—') + '</td><td>' + hours + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="5" class="muted">No data</td></tr>';
+}
+['fd', 'fs', 'fe'].forEach((i) => { $(i).onchange = () => A && rec(); });
+
+$('csv').onclick = () => {
+  if (!A) return;
+  const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const t = ['Date,Time,Employee,Status,Auto']
+    .concat(rows().map((a) => [a.date, a.time, a.name, a.status, a.auto_signout ? 'yes' : 'no'].map(q).join(','))).join('\n');
+  const u = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' }));
+  const l = document.createElement('a');
+  l.href = u; l.download = 'attendance_' + ($('fd').value || 'all') + '.csv';
+  document.body.appendChild(l); l.click(); l.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 1000);
+};
+
+$('add').onclick = async () => {
+  const name = $('nn').value.trim();
+  if (name.length < 2) return toast('Enter a valid name (min 2 characters).', 'error');
+  setBusy($('add'), true);
+  const { error } = await arpc('admin_add_employee', { p_name: name });
+  setBusy($('add'), false);
+  if (error) return adminEnded(error) || toast(error.message, 'error');
+  $('nn').value = '';
+  toast('Employee added. They can now tap “First time? Create your account”.', 'success');
+  adminLoad();
+};
+$('nn').onkeydown = (e) => { if (e.key === 'Enter') $('add').click(); };
+
+$('cfg-here').onclick = async () => {
+  setBusy($('cfg-here'), true);
+  try {
+    const p = await getFix();
+    $('cfg-office_lat').value = p.coords.latitude.toFixed(7);
+    $('cfg-office_lng').value = p.coords.longitude.toFixed(7);
+    toast('Location filled in (accuracy ±' + Math.round(p.coords.accuracy) + ' m). Tap “Save settings” to apply.', 'success');
+  } catch (e) { toast(geoMessage(e), 'error'); }
+  setBusy($('cfg-here'), false);
+};
+$('cfg-save').onclick = async () => {
+  setBusy($('cfg-save'), true);
+  let changed = 0;
+  for (const [k] of CFG) {
+    const v = $('cfg-' + k).value.trim();
+    if (v === String(A.config[k] ?? '')) continue;
+    const { error } = await arpc('admin_update_config', { p_key: k, p_value: v });
+    if (error) { setBusy($('cfg-save'), false); return adminEnded(error) || toast(error.message, 'error'); }
+    changed++;
+  }
+  setBusy($('cfg-save'), false);
+  cfgDrawn = false;
+  toast(changed ? 'Settings saved.' : 'Nothing changed.', changed ? 'success' : '');
+  adminLoad();
+};
+
+// one delegated handler for every action button (admin + leave list)
+document.addEventListener('click', async (ev) => {
+  const b = ev.target.closest('[data-act]');
+  if (!b) return;
+  const act = b.dataset.act, id = b.dataset.id;
+  const run = async (fn, args, okMsg, then) => {
+    setBusy(b, true);
+    const { error } = await (fn.startsWith('admin_') ? arpc(fn, args) : rpc(fn, { p_token: getToken(), ...args }));
+    setBusy(b, false);
+    if (error) {
+      if (fn.startsWith('admin_') ? adminEnded(error) : handleErr(error)) return;
+      toast(error.message, 'error');
+    } else if (okMsg) toast(okMsg, 'success');
+    (then || adminLoad)();
+  };
+
+  if (act === 'lv-cancel') { if (confirm('Cancel this leave?')) run('cancel_leave', { p_id: id }, 'Leave cancelled.', leaveList); }
+  else if (act === 'leave-approve') run('admin_leave_action', { p_id: id, p_action: 'approve' });
+  else if (act === 'leave-reject') run('admin_leave_action', { p_id: id, p_action: 'reject' });
+  else if (act === 'leave-cancel') { if (confirm('Cancel this approved leave?')) run('admin_leave_action', { p_id: id, p_action: 'cancel' }); }
+  else if (act === 'emp-logout') { if (confirm('Log this employee out of all devices?')) run('admin_clear_sessions', { p_id: id }, 'Employee logged out of all devices.'); }
+  else if (act === 'emp-reset') { if (confirm('Reset password? The employee must create their account again.')) run('admin_reset_password', { p_id: id }, 'Password reset. The employee can create an account again.'); }
+  else if (act === 'emp-active') run('admin_set_employee_active', { p_id: id, p_active: b.dataset.on === '1' }, b.dataset.on === '1' ? 'Employee activated.' : 'Employee deactivated and logged out.');
+  else if (act === 'emp-del') { if (confirm('Delete this employee and ALL their records? This cannot be undone.')) run('admin_del_employee', { p_id: id }, 'Employee deleted.'); }
+  else if (act === 'att-save') {
+    run('admin_set_attendance', {
+      p_employee_id: $('m-emp').value, p_date: $('m-date').value,
+      p_sign_in: $('m-in').value || null, p_sign_out: $('m-out').value || null, p_note: $('m-note').value || null,
+    }, 'Attendance saved.');
+  }
+  else if (act === 'att-clear') {
+    if (confirm('Delete ALL attendance records of this employee for ' + $('m-date').value + '?'))
+      run('admin_clear_attendance', { p_employee_id: $('m-emp').value, p_date: $('m-date').value }, 'Records deleted.');
+  }
+  else if (act === 'pw-change') {
+    const np = $('np').value;
+    if (np.trim().length < 8) return toast('New password must be at least 8 characters.', 'error');
+    run('admin_change_password', { p_new_password: np }, 'Admin password changed.', () => { $('np').value = ''; });
+  }
+});
+
+/* =====================================================================
+   START
+   ===================================================================== */
+window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); });
+route();
+</script>
+</body>
+</html>
