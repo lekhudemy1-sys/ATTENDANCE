@@ -89,7 +89,39 @@ td .muted{white-space:normal}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:min(92vw,520px);padding:13px 18px;border-radius:14px;font-size:13.5px;
   background:var(--ink);color:var(--card);box-shadow:var(--shadow);z-index:50;white-space:pre-line}
 #toast.error{background:var(--bad);color:#fff}#toast.success{background:var(--ok);color:#fff}
-@media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}.in{padding:20px}.grid2{grid-template-columns:1fr}}
+
+/* ---------- Calendar ---------- */
+.cal-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal-h{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;text-align:center;padding:4px 0}
+.cal-d{display:block;width:100%;min-height:58px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:7px;
+  font:inherit;font-size:13px;font-weight:400;text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.cal-d.empty{background:none;border:0;cursor:default;pointer-events:none}
+.cal-d.today{border-color:var(--accent)}
+.cal-d.today .cal-n{color:var(--accent)}
+.cal-d.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.cal-n{display:block;font-weight:600;font-size:13px}
+.cal-c{display:inline-block;margin-top:6px;padding:2px 7px;border-radius:99px;background:var(--ok-soft);color:var(--ok);font-size:11px;font-weight:600}
+.cal-detail{margin-top:14px;border:1px solid var(--line);border-radius:16px;padding:14px 16px;background:var(--bg)}
+.dl{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.dl:last-child{border-bottom:0}
+
+/* ---------- Date dropdown (calendar picker) ---------- */
+.dpick{position:relative}
+.dp-btn{width:100%;text-align:left;padding:13px 14px;font-size:15px;font-weight:400;border-radius:13px;background:var(--bg);color:var(--ink);border:1.5px solid var(--line)}
+.dp-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:20;width:min(300px,86vw);background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:12px}
+.dp-pop .cal{gap:4px}
+.dp-pop .cal-nav b{font-size:14px}
+.dp-d{display:block;width:100%;background:none;color:var(--ink);border:1px solid transparent;border-radius:10px;padding:7px 0;font:inherit;font-size:12px;font-weight:400;text-align:center;cursor:pointer}
+.dp-d:hover{background:var(--soft)}
+.dp-d.today{border-color:var(--accent)}
+.dp-d.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
+.dp-foot{width:100%;margin-top:10px;padding:9px 12px;font-size:12.5px}
+
+@media(max-width:640px){
+  .stats{grid-template-columns:repeat(2,1fr)}.in{padding:20px}.grid2{grid-template-columns:1fr}
+  .cal{gap:4px}.cal-d{min-height:48px;padding:5px}.cal-n{font-size:12px}.cal-c{font-size:10px;padding:1px 5px}
+}
 </style>
 </head>
 <body>
@@ -242,7 +274,10 @@ td .muted{white-space:normal}
   <div class="pane" id="p2">
     <div class="card wide"><div class="in">
       <div class="row">
-        <input type="date" id="fd">
+        <div class="dpick" id="fd-wrap">
+          <button type="button" class="dp-btn" id="fd-btn">All dates ▾</button>
+          <div class="dp-pop" id="fd-pop" hidden></div>
+        </div>
         <select id="fs">
           <option value="">All status</option>
           <option value="sign_in">Sign In</option>
@@ -251,16 +286,28 @@ td .muted{white-space:normal}
         <select id="fe"><option value="">All employees</option></select>
         <button id="csv" class="ghost">Export CSV</button>
       </div>
+
       <h2 style="margin-top:22px">Working hours</h2>
       <div class="tw"><table>
         <thead><tr><th>Date</th><th>Employee</th><th>In</th><th>Out</th><th>Hours</th></tr></thead>
         <tbody id="hb"></tbody>
       </table></div>
-      <h2 style="margin-top:22px">Records</h2>
+
+      <h2 style="margin-top:22px">Calendar</h2>
+      <div class="cal-nav">
+        <button class="ghost sm" id="cal-prev">‹ Prev</button>
+        <b id="cal-title"></b>
+        <button class="ghost sm" id="cal-next">Next ›</button>
+      </div>
+      <div class="cal" id="cal"></div>
+      <div class="cal-detail" id="cal-detail"></div>
+
+      <h2 style="margin-top:22px">Monthly average · <span id="avg-title"></span></h2>
       <div class="tw"><table>
-        <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Status</th></tr></thead>
-        <tbody id="ab"></tbody>
+        <thead><tr><th>Employee</th><th>Total hours</th><th>Present / working days</th><th>Avg per present day</th></tr></thead>
+        <tbody id="avb"></tbody>
       </table></div>
+      <p class="hint">Sundays are not counted in present or working days. Working days run up to today.</p>
     </div></div>
     <div class="card wide"><div class="in">
       <h2>Fix attendance manually</h2>
@@ -866,17 +913,35 @@ function drawCfg() {
   }).join('');
 }
 
+/* ---------- Shared helpers for attendance views ---------- */
+const pad2 = (n) => String(n).padStart(2, '0');
+const monthKey = (y, m) => y + '-' + pad2(m + 1);                 // m is 0-based
+const isSunday = (key) => new Date(key + 'T00:00:00').getDay() === 0;
+const fmtLong = (key) => new Date(key + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+const fmtShort = (key) => new Date(key + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+const monthTitle = (y, m) => new Date(y, m, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+// One entry per employee per day: { id, name, date, sign_in, sign_out }
+function sessions() {
+  const g = {};
+  A.attendance.forEach((a) => {
+    const k = a.employee_id + '|' + a.date;
+    const x = g[k] || (g[k] = { id: a.employee_id, name: a.name, date: a.date, sign_in: '', sign_out: '' });
+    if (a.status === 'sign_in') x.sign_in = a.time;
+    else if (a.status === 'sign_out') x.sign_out = a.time;
+  });
+  return Object.values(g);
+}
+const secsOf = (x) => (x.sign_in && x.sign_out ? Math.max(0, toSec(x.sign_out) - toSec(x.sign_in)) : 0);
+
+/* ---------- Working hours table (filters: date picker, status, employee) ---------- */
+let fdVal = '', fdY = null, fdM = null;   // selected date filter ('' = all dates) and picker month
+
 const rows = () => A.attendance.filter((a) =>
-  (!$('fd').value || a.date === $('fd').value) && (!$('fs').value || a.status === $('fs').value) && (!$('fe').value || a.name === $('fe').value));
+  (!fdVal || a.date === fdVal) && (!$('fs').value || a.status === $('fs').value) && (!$('fe').value || a.name === $('fe').value));
 
 function rec() {
   const r = rows();
-  $('ab').innerHTML = r.length
-    ? r.map((a) => '<tr><td>' + esc(a.date) + '</td><td>' + esc(a.time) +
-        (a.auto_signout ? ' <span class="muted">(auto)</span>' : a.source === 'admin' ? ' <span class="muted">(admin)</span>' : '') +
-        '</td><td>' + esc(a.name) + '</td><td>' + pill(a.status === 'sign_in' ? 'signed_in' : 'signed_out', a.status.replace('_', ' ')) + '</td></tr>').join('')
-    : '<tr><td colspan="4" class="muted">No records</td></tr>';
-
   const g = {};
   r.forEach((a) => { const k = a.date + '|' + a.employee_id; (g[k] = g[k] || { date: a.date, name: a.name })[a.status] = a.time; });
   const list = Object.values(g);
@@ -889,8 +954,160 @@ function rec() {
           '</td><td>' + esc(x.sign_out || '—') + '</td><td>' + hours + '</td></tr>';
       }).join('')
     : '<tr><td colspan="5" class="muted">No data</td></tr>';
+  drawCal();
 }
-['fd', 'fs', 'fe'].forEach((i) => { $(i).onchange = () => A && rec(); });
+
+/* ---------- Date dropdown (calendar popup) for the Working hours filter ---------- */
+function fdLabelUpdate() {
+  $('fd-btn').textContent = (fdVal ? fmtShort(fdVal) : 'All dates') + ' ▾';
+}
+function fdRender() {
+  const today = todayIST();
+  const first = new Date(fdY, fdM, 1);
+  const dim = new Date(fdY, fdM + 1, 0).getDate();
+  const lead = (first.getDay() + 6) % 7;
+  const pre = monthKey(fdY, fdM) + '-';
+  let html = '<div class="cal-nav"><button type="button" class="ghost sm" data-nav="-1">‹</button>' +
+    '<b>' + esc(monthTitle(fdY, fdM)) + '</b><button type="button" class="ghost sm" data-nav="1">›</button></div>';
+  html += '<div class="cal">' + ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => '<div class="cal-h">' + d + '</div>').join('');
+  for (let i = 0; i < lead; i++) html += '<div></div>';
+  for (let d = 1; d <= dim; d++) {
+    const key = pre + pad2(d);
+    const cls = 'dp-d' + (key === today ? ' today' : '') + (key === fdVal ? ' sel' : '');
+    html += '<button type="button" class="' + cls + '" data-dv="' + key + '">' + d + '</button>';
+  }
+  html += '</div><button type="button" class="ghost sm dp-foot" data-dv="">Show all dates</button>';
+  $('fd-pop').innerHTML = html;
+}
+$('fd-btn').onclick = () => {
+  const pop = $('fd-pop');
+  if (!pop.hidden) { pop.hidden = true; return; }
+  if (fdY === null) { const t = fdVal || todayIST(); fdY = +t.slice(0, 4); fdM = +t.slice(5, 7) - 1; }
+  fdRender();
+  pop.hidden = false;
+};
+$('fd-pop').onclick = (e) => {
+  const nav = e.target.closest('[data-nav]');
+  if (nav) {
+    let m = fdM + Number(nav.dataset.nav), y = fdY;
+    while (m < 0) { m += 12; y--; }
+    while (m > 11) { m -= 12; y++; }
+    fdY = y; fdM = m;
+    fdRender();
+    return;
+  }
+  const b = e.target.closest('[data-dv]');
+  if (!b) return;
+  fdVal = b.dataset.dv;
+  $('fd-pop').hidden = true;
+  fdLabelUpdate();
+  rec();
+};
+document.addEventListener('click', (e) => { if (!$('fd-wrap').contains(e.target)) $('fd-pop').hidden = true; });
+['fs', 'fe'].forEach((i) => { $(i).onchange = () => A && rec(); });
+
+/* ---------- Calendar: normal month grid, click a day to see who was present ---------- */
+let calY = null, calM = null, calSel = '';   // calM is 0-11
+
+function calShift(delta) {
+  let m = calM + delta, y = calY;
+  while (m < 0) { m += 12; y--; }
+  while (m > 11) { m -= 12; y++; }
+  calY = y; calM = m;
+  drawCal();
+}
+
+function drawCal() {
+  if (!A) return;
+  if (calY === null) { const t = todayIST(); calY = +t.slice(0, 4); calM = +t.slice(5, 7) - 1; calSel = t; }
+  const today = todayIST();
+  const emp = $('fe').value;
+  const pre = monthKey(calY, calM) + '-';
+
+  // number of employees present per date (honours the employee filter)
+  const count = {};
+  sessions().forEach((x) => {
+    if (!x.sign_in || !x.date.startsWith(pre) || (emp && x.name !== emp)) return;
+    count[x.date] = (count[x.date] || 0) + 1;
+  });
+
+  const first = new Date(calY, calM, 1);
+  const dim = new Date(calY, calM + 1, 0).getDate();
+  const lead = (first.getDay() + 6) % 7;   // Monday-first week
+  $('cal-title').textContent = monthTitle(calY, calM);
+
+  let html = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => '<div class="cal-h">' + d + '</div>').join('');
+  for (let i = 0; i < lead; i++) html += '<div class="cal-d empty"></div>';
+  for (let d = 1; d <= dim; d++) {
+    const key = pre + pad2(d);
+    const cls = 'cal-d' + (key === today ? ' today' : '') + (key === calSel ? ' sel' : '');
+    html += '<button type="button" class="' + cls + '" data-day="' + key + '">' +
+      '<span class="cal-n">' + d + '</span>' +
+      (count[key] ? '<span class="cal-c">' + count[key] + ' in</span>' : '') +
+      '</button>';
+  }
+  $('cal').innerHTML = html;
+  renderDetail();
+  drawAvg();
+}
+
+function renderDetail() {
+  const el = $('cal-detail');
+  if (!calSel) { el.innerHTML = '<p class="muted">Tap a date to see who was present.</p>'; return; }
+  const emp = $('fe').value;
+  const list = sessions()
+    .filter((x) => x.date === calSel && x.sign_in && (!emp || x.name === emp))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  el.innerHTML =
+    '<div class="top"><b>' + esc(fmtLong(calSel)) + '</b><span class="muted">' + list.length + ' present</span></div>' +
+    (list.length
+      ? list.map((x) => '<div class="dl"><span>' + esc(x.name) + '</span><b>' + (x.sign_out ? hm(secsOf(x)) : 'Still in') + '</b></div>').join('')
+      : '<p class="muted">No one was present on this day.</p>');
+}
+
+$('cal').onclick = (e) => {
+  const b = e.target.closest('[data-day]');
+  if (!b) return;
+  calSel = b.dataset.day;
+  drawCal();
+};
+$('cal-prev').onclick = () => calShift(-1);
+$('cal-next').onclick = () => calShift(1);
+
+/* ---------- Monthly average: total hours and present days (Sundays excluded) ---------- */
+function drawAvg() {
+  if (!A) return;
+  const today = todayIST();
+  const emp = $('fe').value;
+  const pre = monthKey(calY, calM) + '-';
+  $('avg-title').textContent = monthTitle(calY, calM);
+
+  // working days = Mon–Sat days from the 1st up to today (or the whole month if it is past)
+  const dim = new Date(calY, calM + 1, 0).getDate();
+  const todayY = +today.slice(0, 4), todayM = +today.slice(5, 7) - 1, todayD = +today.slice(8, 10);
+  const monthIdx = calY * 12 + calM, todayIdx = todayY * 12 + todayM;
+  const last = monthIdx < todayIdx ? dim : monthIdx === todayIdx ? todayD : 0;
+  let working = 0;
+  for (let d = 1; d <= last; d++) if (new Date(calY, calM, d).getDay() !== 0) working++;
+
+  const stat = {};
+  A.employees.forEach((e) => { if (!emp || e.name === emp) stat[e.id] = { name: e.name, sec: 0, days: new Set() }; });
+  sessions().forEach((x) => {
+    const s = stat[x.id];
+    if (!s || !x.date.startsWith(pre)) return;
+    s.sec += secsOf(x);
+    if (x.sign_in && !isSunday(x.date)) s.days.add(x.date);
+  });
+
+  const list = Object.values(stat).sort((a, b) => a.name.localeCompare(b.name));
+  $('avb').innerHTML = list.length
+    ? list.map((s) => {
+        const n = s.days.size;
+        return '<tr><td><strong>' + esc(s.name) + '</strong></td><td>' + hm(s.sec) + '</td><td>' +
+          n + '/' + working + '</td><td>' + (n ? hm(s.sec / n) : '—') + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="4" class="muted">No employees</td></tr>';
+}
 
 $('csv').onclick = () => {
   if (!A) return;
@@ -899,7 +1116,7 @@ $('csv').onclick = () => {
     .concat(rows().map((a) => [a.date, a.time, a.name, a.status, a.auto_signout ? 'yes' : 'no'].map(q).join(','))).join('\n');
   const u = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' }));
   const l = document.createElement('a');
-  l.href = u; l.download = 'attendance_' + ($('fd').value || 'all') + '.csv';
+  l.href = u; l.download = 'attendance_' + (fdVal || 'all') + '.csv';
   document.body.appendChild(l); l.click(); l.remove();
   setTimeout(() => URL.revokeObjectURL(u), 1000);
 };
@@ -987,6 +1204,7 @@ document.addEventListener('click', async (ev) => {
 /* =====================================================================
    START
    ===================================================================== */
+fdLabelUpdate();
 window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); });
 route();
 </script>
